@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import ProductCard from "@/components/ProductCard";
 import { buscarProdutos, categoriaBonita, getCategorias } from "@/lib/site";
 import { escolherLoja } from "@/lib/lojas";
-import { IconeCarrinho, IconeWhatsApp } from "@/components/Icones";
+import { IconeCaixa, IconeCarrinho, IconeWhatsApp } from "@/components/Icones";
 
 export const metadata: Metadata = {
   title: "Produtos",
@@ -20,12 +21,118 @@ const ORDENS = [
 
 type SP = Promise<{ q?: string; cat?: string; ordem?: string; pagina?: string }>;
 
-function montarHref(base: { q?: string; cat?: string; ordem?: string }, extra: Record<string, string | undefined>) {
+function montarHref(base: Base, extra: Record<string, string | undefined>) {
   const p = new URLSearchParams();
   const tudo = { ...base, ...extra };
   for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
   const s = p.toString();
   return s ? `/produtos?${s}` : "/produtos";
+}
+
+type Resultado = ReturnType<typeof buscarProdutos>;
+type Base = { q?: string; cat?: string; ordem?: string };
+
+async function Contagem({ resultado }: { resultado: Resultado }) {
+  const { total, erro } = await resultado;
+  if (erro) return "Não foi possível carregar os produtos";
+  return total === 1 ? "1 produto em estoque" : `${total} produtos em estoque`;
+}
+
+// Mesma grade da lista, com cartoes vazios pulsando enquanto a consulta nao volta.
+function ListaCarregando() {
+  return (
+    <div role="status" aria-label="Carregando produtos" className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 xl:grid-cols-4">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className="animate-pulse overflow-hidden rounded-cartao bg-white shadow-suave ring-1 ring-linha/70">
+          <div className="flex aspect-square items-center justify-center bg-fundo text-azul/15">
+            <IconeCaixa className="size-12" />
+          </div>
+          <div className="space-y-2.5 px-4 pb-4 pt-3">
+            <div className="h-3 w-1/3 rounded bg-fundo" />
+            <div className="h-4 w-full rounded bg-fundo" />
+            <div className="h-4 w-2/3 rounded bg-fundo" />
+            <div className="h-7 w-1/2 rounded bg-fundo" />
+            <div className="h-10 w-full rounded-full bg-fundo" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+async function Lista({ resultado, q, base, pagina }: { resultado: Resultado; q: string; base: Base; pagina: number }) {
+  const { itens, total, erro } = await resultado;
+  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+
+  // Falha na consulta nao e "sem estoque": avisa e deixa tentar de novo.
+  if (erro) {
+    return (
+      <div role="alert" className="rounded-cartao bg-white p-8 text-center shadow-suave ring-1 ring-linha/70">
+        <p className="text-xl font-bold text-marinho">Não conseguimos carregar os produtos agora</p>
+        <p className="mx-auto mt-2 max-w-md text-suave">
+          Foi uma falha momentânea do site, não falta de estoque. Tente de novo em instantes ou fale com a equipe.
+        </p>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          {/* <a> comum (nao Link): recarrega a pagina inteira e refaz a consulta. */}
+          <a href={montarHref(base, { pagina: pagina > 1 ? String(pagina) : undefined })} className="button button--lg button--tertiary">
+            Tentar de novo
+          </a>
+          <a
+            {...escolherLoja(q ? `Olá! Vocês têm ${q}?` : "Olá! Vim pelo site da Info In Time.")}
+            className="button button--lg button--zap"
+          >
+            <IconeWhatsApp /> Perguntar no WhatsApp
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {itens.length ? (
+        <section aria-labelledby="lista-produtos">
+          <h2 id="lista-produtos" className="sr-only">Lista de produtos</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 xl:grid-cols-4">
+            {itens.map((p, i) => (
+              <ProductCard key={p.codigo} produto={p} prioridade={i < 4} />
+            ))}
+          </div>
+        </section>
+      ) : (
+        <div className="rounded-cartao bg-white shadow-suave ring-1 ring-linha/70 p-8 text-center">
+          <p className="text-xl font-bold text-marinho">Nenhum produto encontrado no estoque online</p>
+          <p className="mx-auto mt-2 max-w-md text-suave">
+            Nem tudo que temos na loja aparece aqui. Mande uma mensagem que a equipe confere para você.
+          </p>
+          <a
+            {...escolherLoja(q ? `Olá! Vocês têm ${q}?` : "Olá! Vim pelo site da Info In Time.")}
+            className="button button--lg button--zap mt-5"
+          >
+            <IconeWhatsApp /> Perguntar no WhatsApp
+          </a>
+        </div>
+      )}
+
+      {paginas > 1 && (
+        <nav aria-label="Páginas" className="mt-8 flex flex-wrap items-center justify-center gap-2">
+          {pagina > 1 && (
+            <Link href={montarHref(base, { pagina: String(pagina - 1) })} className="button button--tertiary">
+              Anterior
+            </Link>
+          )}
+          <span className="px-2 text-suave">
+            Página {pagina} de {paginas}
+          </span>
+          {pagina < paginas && (
+            <Link href={montarHref(base, { pagina: String(pagina + 1) })} className="button button--tertiary">
+              Próxima
+            </Link>
+          )}
+        </nav>
+      )}
+    </>
+  );
 }
 
 export default async function Produtos({ searchParams }: { searchParams: SP }) {
@@ -36,14 +143,20 @@ export default async function Produtos({ searchParams }: { searchParams: SP }) {
   const ordenado = ordem !== "relevancia";
   const pagina = Math.max(1, Number(sp.pagina) || 1);
 
-  const [{ itens, total }, categorias] = await Promise.all([
-    buscarProdutos({ busca: q, categoria: cat, ordem, pagina, porPagina: POR_PAGINA }),
-    getCategorias(),
-  ]);
-  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  // A consulta dos produtos nao segura a pagina: titulo, ordenacao e categorias saem na
+  // hora e a lista chega em seguida (Suspense). Assim, ao trocar de filtro, o cliente ve
+  // o novo titulo e um "carregando" em vez da lista antiga parada na tela.
+  const resultado: Resultado = buscarProdutos({ busca: q, categoria: cat, ordem, pagina, porPagina: POR_PAGINA });
+  const categorias = await getCategorias();
   const base = { q: q || undefined, cat: cat || undefined, ordem: ordem !== "relevancia" ? ordem : undefined };
+  // Muda a cada troca de filtro, para o "carregando" aparecer de novo.
+  const chave = JSON.stringify([q, cat, ordem, pagina]);
 
-  const titulo = q ? `Resultados para “${q}”` : cat ? categoriaBonita(cat) : "Todos os produtos";
+  const titulo = q
+    ? `Resultados para “${q}”${cat ? ` em ${categoriaBonita(cat)}` : ""}`
+    : cat
+      ? categoriaBonita(cat)
+      : "Todos os produtos";
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-8">
@@ -52,7 +165,9 @@ export default async function Produtos({ searchParams }: { searchParams: SP }) {
           <span className="faixa-curta" />
           <h1 className="mt-2 text-3xl font-extrabold text-marinho sm:text-4xl">{titulo}</h1>
           <p className="mt-1 text-suave">
-            {total === 1 ? "1 produto em estoque" : `${total} produtos em estoque`}
+            <Suspense key={chave} fallback="Carregando produtos…">
+              <Contagem resultado={resultado} />
+            </Suspense>
             {(q || cat || ordenado) && (
               <>
                 {" · "}
@@ -125,47 +240,9 @@ export default async function Produtos({ searchParams }: { searchParams: SP }) {
         </aside>
 
         <div>
-          {itens.length ? (
-            <section aria-labelledby="lista-produtos">
-              <h2 id="lista-produtos" className="sr-only">Lista de produtos</h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 xl:grid-cols-4">
-                {itens.map((p, i) => (
-                  <ProductCard key={p.codigo} produto={p} prioridade={i < 4} />
-                ))}
-              </div>
-            </section>
-          ) : (
-            <div className="rounded-cartao bg-white shadow-suave ring-1 ring-linha/70 p-8 text-center">
-              <p className="text-xl font-bold text-marinho">Nenhum produto encontrado no estoque online</p>
-              <p className="mx-auto mt-2 max-w-md text-suave">
-                Nem tudo que temos na loja aparece aqui. Mande uma mensagem que a equipe confere para você.
-              </p>
-              <a
-                {...escolherLoja(q ? `Olá! Vocês têm ${q}?` : "Olá! Vim pelo site da Info In Time.")}
-                className="button button--lg button--zap mt-5"
-              >
-                <IconeWhatsApp /> Perguntar no WhatsApp
-              </a>
-            </div>
-          )}
-
-          {paginas > 1 && (
-            <nav aria-label="Páginas" className="mt-8 flex flex-wrap items-center justify-center gap-2">
-              {pagina > 1 && (
-                <Link href={montarHref(base, { pagina: String(pagina - 1) })} className="button button--tertiary">
-                  Anterior
-                </Link>
-              )}
-              <span className="px-2 text-suave">
-                Página {pagina} de {paginas}
-              </span>
-              {pagina < paginas && (
-                <Link href={montarHref(base, { pagina: String(pagina + 1) })} className="button button--tertiary">
-                  Próxima
-                </Link>
-              )}
-            </nav>
-          )}
+          <Suspense key={chave} fallback={<ListaCarregando />}>
+            <Lista resultado={resultado} q={q} base={base} pagina={pagina} />
+          </Suspense>
         </div>
       </div>
     </div>

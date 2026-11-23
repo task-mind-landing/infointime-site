@@ -38,7 +38,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={archivo.variable}>
+    // data-scroll-behavior: o CSS usa rolagem suave; com isto o Next volta ao topo na hora
+    // ao trocar de pagina ou de filtro (sem isto o titulo parava atras do cabecalho fixo).
+    <html lang="pt-BR" className={archivo.variable} data-scroll-behavior="smooth">
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );

@@ -4,6 +4,7 @@ import { getCategorias, getConteudo, categoriaBonita, slugCategoria } from "@/li
 import { escolherLoja } from "@/lib/lojas";
 import { IconeBusca, IconeWhatsApp } from "./Icones";
 import MenuMobile from "./MenuMobile";
+import ChipsCategorias from "./ChipsCategorias";
 import { BotaoCarrinho } from "./carrinho/Carrinho";
 
 const NAV = [
@@ -19,6 +20,7 @@ export default async function Header() {
   const principais = categorias.filter((c) => c.categoria !== "OUTROS").slice(0, 12);
   const itensCategoria = principais.map((c) => ({
     href: `/produtos?cat=${slugCategoria(c.categoria)}`,
+    cat: c.categoria,
     label: categoriaBonita(c.categoria),
   }));
 
@@ -92,20 +94,7 @@ export default async function Header() {
 
       {principais.length > 0 && (
         <nav aria-label="Categorias" className="border-b border-linha bg-white/90 text-texto backdrop-blur-md">
-          <div className="scroll-x mx-auto flex max-w-7xl gap-1.5 overflow-x-auto px-4 py-2">
-            <Link href="/produtos" className="chip chip--accent min-h-10 shrink-0 px-3.5 font-semibold">
-              Todos os produtos
-            </Link>
-            {itensCategoria.map((c) => (
-              <Link
-                key={c.href}
-                href={c.href}
-                className="flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-sm text-suave transition-colors hover:bg-fundo hover:text-azul"
-              >
-                {c.label}
-              </Link>
-            ))}
-          </div>
+          <ChipsCategorias categorias={itensCategoria} />
         </nav>
       )}
     </header>
