@@ -96,20 +96,27 @@ export async function buscarProdutos(opts: {
   pagina?: number;
   porPagina?: number;
   ordem?: string;
-}): Promise<{ itens: Produto[]; total: number }> {
+}): Promise<{ itens: Produto[]; total: number; erro?: boolean }> {
+  // erro = a consulta ao banco falhou. A tela usa isso para nao dizer "nenhum produto"
+  // quando na verdade nao deu para consultar.
   const porPagina = opts.porPagina ?? 24;
   const pagina = Math.max(1, opts.pagina ?? 1);
   const termo = opts.busca?.trim();
   if (termo) {
     // Com busca: primeiro o que a busca da Bianca acha (relevancia, sinonimos,
     // "sem fio"), depois o que so a busca por palavra acha. Pagina em memoria.
+    let simplesFalhou = false;
     const [viaBianca, simples] = await Promise.all([
       buscarComoBianca(termo, opts.categoria),
       rpc<Produto[]>(
         "it_site_catalogo",
         { p_busca: termo, p_categoria: opts.categoria || null, p_limite: 300, p_offset: 0, p_codigos: null, p_ordem: "relevancia" },
         CACHE_CATALOGO,
-      ).catch(() => [] as Produto[]),
+      ).catch((e) => {
+        console.error(e);
+        simplesFalhou = true;
+        return [] as Produto[];
+      }),
     ]);
     const vistos = new Set<string>();
     let todos = [...(viaBianca ?? []), ...simples].filter((p) => !vistos.has(p.codigo) && vistos.add(p.codigo));
@@ -119,7 +126,7 @@ export async function buscarProdutos(opts: {
     // Sem foto so passa na frente quando o cliente escolhe ordenar por preco.
     else todos = [...todos.filter((p) => p.foto_url), ...todos.filter((p) => !p.foto_url)];
     const ini = (pagina - 1) * porPagina;
-    return { itens: todos.slice(ini, ini + porPagina), total: todos.length };
+    return { itens: todos.slice(ini, ini + porPagina), total: todos.length, erro: simplesFalhou && !todos.length };
   }
   try {
     const itens = await rpc<Produto[]>(
@@ -137,7 +144,7 @@ export async function buscarProdutos(opts: {
     return { itens, total: itens[0]?.total ?? 0 };
   } catch (e) {
     console.error(e);
-    return { itens: [], total: 0 };
+    return { itens: [], total: 0, erro: true };
   }
 }
 
