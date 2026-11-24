@@ -226,7 +226,10 @@ export default async function Produtos({ searchParams }: { searchParams: SP }) {
             {categorias.map((c) => (
               <li key={c.categoria}>
                 <Link
-                  href={montarHref({ q: base.q, ordem: base.ordem }, { cat: c.categoria })}
+                  // Sem a busca: quem clica numa categoria quer ver a categoria inteira. A caixa
+                  // de busca do topo fica vazia, entao uma busca antiga guardada no endereco
+                  // filtrava a categoria sem o cliente ver ("hub" em Toners = nenhum produto).
+                  href={montarHref({ ordem: base.ordem }, { cat: c.categoria })}
                   className={`flex justify-between gap-2 rounded-md px-2 py-1.5 ${
                     cat === c.categoria ? "bg-azul/8 font-semibold text-azul" : "text-suave hover:bg-fundo hover:text-texto"
                   }`}
